@@ -5,22 +5,22 @@ server:
       max-file-size: 100MB
       max-request-size: 100MB
   tomcat:
-    connection-timeout: 30000
-    keep-alive-timeout: 600000
+    connection-timeout: 60000     # HTTP连接超时：60秒
+    keep-alive-timeout: 1800000   # Keep-Alive超时：30分钟
 
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/nepm?useSSL=false&serverTimezone=UTC&allowMultiQueries=true&connectTimeout=60000&socketTimeout=600000
+    url: jdbc:mysql://localhost:3306/nepm?useSSL=false&serverTimezone=UTC&allowMultiQueries=true&connectTimeout=60000&socketTimeout=0
     username: root
     password: root
     hikari:
       maximum-pool-size: 10
       minimum-idle: 5
       connection-timeout: 60000
-      idle-timeout: 1200000
-      max-lifetime: 1800000
-      leak-detection-threshold: 120000
+      idle-timeout: 1800000       # 空闲超时：30分钟
+      max-lifetime: 3600000       # 最大生命周期：1小时
+      leak-detection-threshold: 300000  # 泄漏检测：5分钟
 
   servlet:
     multipart:
@@ -28,15 +28,15 @@ spring:
       max-file-size: 100MB
       max-request-size: 100MB
 
-  # 增加事务超时时间
+  # 移除事务超时限制
   transaction:
-    default-timeout: 1200
+    default-timeout: 0  # 0表示无超时限制
 
 mybatis:
   type-aliases-package: com.factcheck.app.entity
   configuration:
     map-underscore-to-camel-case: true
-    default-statement-timeout: 60
+    default-statement-timeout: 0  # 移除SQL查询超时限制
 
 logging:
   level:
@@ -56,7 +56,8 @@ fact-check:
     dir: C:/Users/Cleme/Code/Work/factcheck/uploads
   server:
     url: http://workspace.featurize.cn:35407
+  # 移除或大幅增加超时限制
   timeout:
-    max-wait: 900
-    query-wait: 600
-    python-exec: 1200
+    max-wait: 0           # 0表示无限等待
+    query-wait: 0         # 0表示无限等待
+    python-exec: 0        # 0表示无限等待

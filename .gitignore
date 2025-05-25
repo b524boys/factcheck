@@ -6,3 +6,4 @@ logs/
 target/
 uploads/
 client.log
+result.json

@@ -142,6 +142,26 @@
             transform: none;
         }
 
+        .cancel-btn {
+            width: 100%;
+            background: #f56565;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .cancel-btn:hover {
+            background: #e53e3e;
+            transform: translateY(-2px);
+        }
+
         /* Modal Styles */
         .modal {
             display: none;
@@ -237,7 +257,7 @@
             padding: 2rem;
             border-radius: 15px;
             width: 90%;
-            max-width: 400px;
+            max-width: 500px;
             text-align: center;
             animation: modalFadeIn 0.3s ease;
         }
@@ -266,6 +286,27 @@
         .loading-step {
             font-size: 0.9rem;
             color: #666;
+            margin-bottom: 1rem;
+        }
+
+        .loading-time {
+            font-size: 0.8rem;
+            color: #999;
+            margin-bottom: 1rem;
+        }
+
+        .loading-cancel-btn {
+            background: #f56565;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .loading-cancel-btn:hover {
+            background: #e53e3e;
         }
 
         /* Result Styles */
@@ -384,145 +425,148 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">🔍 事实核查系统</div>
-        <div>
-            <span class="api-status" id="apiStatus">API未配置</span>
-            <button class="settings-btn" onclick="openSettings()">⚙️ 设置</button>
-        </div>
+<div class="header">
+    <div class="logo">🔍 事实核查系统</div>
+    <div>
+        <span class="api-status" id="apiStatus">API未配置</span>
+        <button class="settings-btn" onclick="openSettings()">⚙️ 设置</button>
     </div>
+</div>
 
-    <div class="container">
-        <div class="card">
-            <form id="factCheckForm">
-                <div class="form-group">
-                    <label for="claim">请输入需要核查的声明 *</label>
-                    <textarea id="claim" name="claim" required 
-                              placeholder="例如：地球是平的..."></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="media">上传媒体文件（可选）</label>
-                    <input type="file" id="media" name="media" accept=".mp4,.jpg,.jpeg,.png,.gif">
-                    <small style="color: #666; margin-top: 0.5rem; display: block;">
-                        支持视频（MP4）和图片（JPG, PNG, GIF）格式
-                    </small>
-                </div>
-
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="directVerify" name="directVerify">
-                        <label for="directVerify">使用直接验证模式（不执行网络查询，仅使用AI分析）</label>
-                    </div>
-                </div>
-
-                <button type="submit" class="submit-btn" id="submitBtn">
-                    🚀 开始事实核查
-                </button>
-            </form>
-        </div>
-
-        <div id="resultContainer"></div>
-    </div>
-
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeSettings()">&times;</span>
-            <h2>API 配置</h2>
-            <p style="color: #666; margin-bottom: 1rem;">请输入您的 Google API 配置信息：</p>
-            
-            <label for="apiKey">Google API Key:</label>
-            <input type="password" id="apiKey" placeholder="输入您的 Google API Key">
-            
-            <label for="cseId">Google Custom Search Engine ID:</label>
-            <input type="text" id="cseId" placeholder="输入您的 CSE ID">
-            
-            <div style="margin-top: 1.5rem;">
-                <button class="modal-btn" onclick="saveSettings()">保存配置</button>
-                <button class="modal-btn" onclick="closeSettings()" 
-                        style="background: #e2e8f0; color: #333;">取消</button>
+<div class="container">
+    <div class="card">
+        <form id="factCheckForm">
+            <div class="form-group">
+                <label for="claim">请输入需要核查的声明 *</label>
+                <textarea id="claim" name="claim" required
+                          placeholder="例如：地球是平的..."></textarea>
             </div>
-        </div>
+
+            <div class="form-group">
+                <label for="media">上传媒体文件（可选）</label>
+                <input type="file" id="media" name="media" accept=".mp4,.jpg,.jpeg,.png,.gif">
+                <small style="color: #666; margin-top: 0.5rem; display: block;">
+                    支持视频（MP4）和图片（JPG, PNG, GIF）格式
+                </small>
+            </div>
+
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="directVerify" name="directVerify">
+                    <label for="directVerify">使用直接验证模式（不执行网络查询，仅使用AI分析）</label>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+                🚀 开始事实核查
+            </button>
+        </form>
     </div>
 
-    <!-- Loading Modal -->
-    <div id="loadingModal" class="loading-modal">
-        <div class="loading-content">
-            <div class="spinner"></div>
-            <div class="loading-text" id="loadingText">正在处理您的请求...</div>
-            <div class="loading-step" id="loadingStep">准备中</div>
+    <div id="resultContainer"></div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeSettings()">&times;</span>
+        <h2>API 配置</h2>
+        <p style="color: #666; margin-bottom: 1rem;">请输入您的 Google API 配置信息：</p>
+
+        <label for="apiKey">Google API Key:</label>
+        <input type="password" id="apiKey" placeholder="输入您的 Google API Key">
+
+        <label for="cseId">Google Custom Search Engine ID:</label>
+        <input type="text" id="cseId" placeholder="输入您的 CSE ID">
+
+        <div style="margin-top: 1.5rem;">
+            <button class="modal-btn" onclick="saveSettings()">保存配置</button>
+            <button class="modal-btn" onclick="closeSettings()"
+                    style="background: #e2e8f0; color: #333;">取消</button>
         </div>
     </div>
+</div>
 
-    <script>
-        // 全局变量
-        let currentTaskId = null;
-        let checkInterval = null;
+<!-- Loading Modal -->
+<div id="loadingModal" class="loading-modal">
+    <div class="loading-content">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">正在处理您的请求...</div>
+        <div class="loading-step" id="loadingStep">准备中</div>
+        <div class="loading-time" id="loadingTime">已等待：0 分钟</div>
+        <button class="loading-cancel-btn" onclick="cancelTask()">取消任务</button>
+    </div>
+</div>
 
-        // 页面加载时检查API配置
-        document.addEventListener('DOMContentLoaded', function() {
-            checkApiConfiguration();
-        });
+<script>
+    // 全局变量
+    let currentTaskId = null;
+    let checkInterval = null;
+    let startTime = null;
+    let timeInterval = null;
+    let isCancelled = false;
 
-        // 检查API配置状态
-        function checkApiConfiguration() {
-            const apiKey = localStorage.getItem('googleApiKey');
-            const cseId = localStorage.getItem('googleCseId');
-            const statusElement = document.getElementById('apiStatus');
-            
-            if (apiKey && cseId) {
-                statusElement.textContent = 'API已配置';
-                statusElement.className = 'api-status api-configured';
-            } else {
-                statusElement.textContent = 'API未配置';
-                statusElement.className = 'api-status api-not-configured';
-            }
+    // 页面加载时检查API配置
+    document.addEventListener('DOMContentLoaded', function() {
+        checkApiConfiguration();
+    });
+
+    // 检查API配置状态
+    function checkApiConfiguration() {
+        const apiKey = localStorage.getItem('googleApiKey');
+        const cseId = localStorage.getItem('googleCseId');
+        const statusElement = document.getElementById('apiStatus');
+
+        if (apiKey && cseId) {
+            statusElement.textContent = 'API已配置';
+            statusElement.className = 'api-status api-configured';
+        } else {
+            statusElement.textContent = 'API未配置';
+            statusElement.className = 'api-status api-not-configured';
+        }
+    }
+
+    // 打开设置弹窗
+    function openSettings() {
+        const modal = document.getElementById('settingsModal');
+        const apiKeyInput = document.getElementById('apiKey');
+        const cseIdInput = document.getElementById('cseId');
+
+        // 填充现有值
+        apiKeyInput.value = localStorage.getItem('googleApiKey') || '';
+        cseIdInput.value = localStorage.getItem('googleCseId') || '';
+
+        modal.style.display = 'block';
+    }
+
+    // 关闭设置弹窗
+    function closeSettings() {
+        document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    // 保存设置
+    function saveSettings() {
+        const apiKey = document.getElementById('apiKey').value.trim();
+        const cseId = document.getElementById('cseId').value.trim();
+
+        if (!apiKey || !cseId) {
+            alert('请填写完整的API配置信息');
+            return;
         }
 
-        // 打开设置弹窗
-        function openSettings() {
-            const modal = document.getElementById('settingsModal');
-            const apiKeyInput = document.getElementById('apiKey');
-            const cseIdInput = document.getElementById('cseId');
-            
-            // 填充现有值
-            apiKeyInput.value = localStorage.getItem('googleApiKey') || '';
-            cseIdInput.value = localStorage.getItem('googleCseId') || '';
-            
-            modal.style.display = 'block';
-        }
+        localStorage.setItem('googleApiKey', apiKey);
+        localStorage.setItem('googleCseId', cseId);
 
-        // 关闭设置弹窗
-        function closeSettings() {
-            document.getElementById('settingsModal').style.display = 'none';
-        }
+        checkApiConfiguration();
+        closeSettings();
 
-        // 保存设置
-        function saveSettings() {
-            const apiKey = document.getElementById('apiKey').value.trim();
-            const cseId = document.getElementById('cseId').value.trim();
-            
-            if (!apiKey || !cseId) {
-                alert('请填写完整的API配置信息');
-                return;
-            }
-            
-            localStorage.setItem('googleApiKey', apiKey);
-            localStorage.setItem('googleCseId', cseId);
-            
-            checkApiConfiguration();
-            closeSettings();
-            
-            // 显示成功提示
-            showNotification('API配置已保存', 'success');
-        }
+        showNotification('API配置已保存', 'success');
+    }
 
-        // 显示通知
-        function showNotification(message, type = 'info') {
-            // 简单的通知实现
-            const notification = document.createElement('div');
-            notification.style.cssText = `
+    // 显示通知
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
                 position: fixed;
                 top: 20px;
                 right: 20px;
@@ -533,199 +577,246 @@
                 z-index: 1002;
                 animation: slideIn 0.3s ease;
             `;
-            notification.textContent = message;
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+
+    // 显示加载状态
+    function showLoading(text = '正在处理您的请求...', step = '准备中') {
+        document.getElementById('loadingText').textContent = text;
+        document.getElementById('loadingStep').textContent = step;
+        document.getElementById('loadingModal').style.display = 'block';
+
+        // 开始计时
+        startTime = new Date();
+        updateElapsedTime();
+        timeInterval = setInterval(updateElapsedTime, 1000);
+    }
+
+    // 隐藏加载状态
+    function hideLoading() {
+        document.getElementById('loadingModal').style.display = 'none';
+
+        // 停止计时
+        if (timeInterval) {
+            clearInterval(timeInterval);
+            timeInterval = null;
+        }
+    }
+
+    // 更新已等待时间
+    function updateElapsedTime() {
+        if (!startTime) return;
+
+        const now = new Date();
+        const elapsed = Math.floor((now - startTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+
+        document.getElementById('loadingTime').textContent =
+            `已等待：${minutes} 分钟 ${seconds} 秒`;
+    }
+
+    // 更新加载步骤
+    function updateLoadingStep(step) {
+        document.getElementById('loadingStep').textContent = step;
+    }
+
+    // 取消任务
+    function cancelTask() {
+        isCancelled = true;
+        if (checkInterval) {
+            clearInterval(checkInterval);
+            checkInterval = null;
+        }
+        hideLoading();
+        showNotification('任务已取消', 'info');
+
+        // 重置按钮状态
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🚀 开始事实核查';
+    }
+
+    // 表单提交处理
+    document.getElementById('factCheckForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const claim = document.getElementById('claim').value.trim();
+        if (!claim) {
+            alert('请输入需要核查的声明');
+            return;
         }
 
-        // 显示加载状态
-        function showLoading(text = '正在处理您的请求...', step = '准备中') {
-            document.getElementById('loadingText').textContent = text;
-            document.getElementById('loadingStep').textContent = step;
-            document.getElementById('loadingModal').style.display = 'block';
+        // 检查API配置
+        const apiKey = localStorage.getItem('googleApiKey');
+        const cseId = localStorage.getItem('googleCseId');
+        const directVerify = document.getElementById('directVerify').checked;
+
+        if (!directVerify && (!apiKey || !cseId)) {
+            alert('请先配置Google API信息，或选择直接验证模式');
+            openSettings();
+            return;
         }
 
-        // 隐藏加载状态
-        function hideLoading() {
-            document.getElementById('loadingModal').style.display = 'none';
-        }
+        // 重置取消状态
+        isCancelled = false;
 
-        // 更新加载步骤
-        function updateLoadingStep(step) {
-            document.getElementById('loadingStep').textContent = step;
-        }
+        // 禁用提交按钮
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = '处理中...';
 
-        // 表单提交处理
-        document.getElementById('factCheckForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const claim = document.getElementById('claim').value.trim();
-            if (!claim) {
-                alert('请输入需要核查的声明');
-                return;
-            }
-
-            // 检查API配置
-            const apiKey = localStorage.getItem('googleApiKey');
-            const cseId = localStorage.getItem('googleCseId');
-            const directVerify = document.getElementById('directVerify').checked;
-            
-            if (!directVerify && (!apiKey || !cseId)) {
-                alert('请先配置Google API信息，或选择直接验证模式');
-                openSettings();
-                return;
-            }
-
-            // 禁用提交按钮
-            const submitBtn = document.getElementById('submitBtn');
-            submitBtn.disabled = true;
-            submitBtn.textContent = '处理中...';
-
-            try {
-                await submitFactCheck();
-            } catch (error) {
-                console.error('提交失败:', error);
+        try {
+            await submitFactCheck();
+        } catch (error) {
+            console.error('提交失败:', error);
+            if (!isCancelled) {
                 showResult({
                     success: false,
                     error: '提交失败: ' + error.message
                 });
-            } finally {
-                // 重新启用提交按钮
+            }
+        } finally {
+            // 重新启用提交按钮
+            if (!isCancelled) {
                 submitBtn.disabled = false;
                 submitBtn.textContent = '🚀 开始事实核查';
             }
-        });
+        }
+    });
 
-        // 提交事实核查请求
-        async function submitFactCheck() {
-            const formData = new FormData();
-            const claim = document.getElementById('claim').value.trim();
-            const mediaFile = document.getElementById('media').files[0];
-            const directVerify = document.getElementById('directVerify').checked;
-            
-            formData.append('claim', claim);
-            formData.append('directVerify', directVerify);
-            formData.append('apiKey', localStorage.getItem('googleApiKey') || '');
-            formData.append('cseId', localStorage.getItem('googleCseId') || '');
-            
-            if (mediaFile) {
-                formData.append('media', mediaFile);
+    // 提交事实核查请求
+    async function submitFactCheck() {
+        const formData = new FormData();
+        const claim = document.getElementById('claim').value.trim();
+        const mediaFile = document.getElementById('media').files[0];
+        const directVerify = document.getElementById('directVerify').checked;
+
+        formData.append('claim', claim);
+        formData.append('directVerify', directVerify);
+        formData.append('apiKey', localStorage.getItem('googleApiKey') || '');
+        formData.append('cseId', localStorage.getItem('googleCseId') || '');
+
+        if (mediaFile) {
+            formData.append('media', mediaFile);
+        }
+
+        showLoading('正在提交任务...', '连接服务器');
+
+        try {
+            const response = await fetch('/api/fact-check/submit', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            showLoading('正在提交任务...', '连接服务器');
+            const result = await response.json();
 
-            try {
-                const response = await fetch('/api/fact-check/submit', {
-                    method: 'POST',
-                    body: formData
-                });
+            if (result.success && !isCancelled) {
+                currentTaskId = result.taskId;
+                updateLoadingStep('任务已提交，等待处理...');
 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const result = await response.json();
-                
-                if (result.success) {
-                    currentTaskId = result.taskId;
-                    updateLoadingStep('任务已提交，等待处理...');
-                    
-                    // 开始轮询任务状态
-                    await pollTaskStatus();
-                } else {
-                    throw new Error(result.error || '提交失败');
-                }
-            } catch (error) {
+                // 开始轮询任务状态（无时间限制）
+                await pollTaskStatus();
+            } else if (!isCancelled) {
+                throw new Error(result.error || '提交失败');
+            }
+        } catch (error) {
+            if (!isCancelled) {
                 hideLoading();
                 throw error;
             }
         }
+    }
 
-        // 轮询任务状态
-        async function pollTaskStatus() {
-            if (!currentTaskId) return;
+    // 轮询任务状态（移除时间限制）
+    async function pollTaskStatus() {
+        if (!currentTaskId || isCancelled) return;
 
-            const maxAttempts = 120; // 最多轮询2分钟（每秒一次）
-            let attempts = 0;
+        const poll = async () => {
+            if (isCancelled) return;
 
-            const poll = async () => {
-                if (attempts >= maxAttempts) {
-                    hideLoading();
-                    showResult({
-                        success: false,
-                        error: '处理超时，请稍后重试'
-                    });
-                    return;
+            try {
+                const response = await fetch(`/api/fact-check/status/${currentTaskId}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
                 }
 
-                attempts++;
+                const result = await response.json();
 
-                try {
-                    const response = await fetch(`/api/fact-check/status/${currentTaskId}`);
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
+                if (result.status === 'processing') {
+                    const step = result.step || '处理中...';
+                    const progress = result.progress || '';
+                    updateLoadingStep(`${step} ${progress}`);
+
+                    // 继续轮询，无时间限制
+                    if (!isCancelled) {
+                        setTimeout(poll, 2000); // 增加轮询间隔到2秒，减少服务器压力
                     }
-
-                    const result = await response.json();
-                    
-                    if (result.status === 'processing') {
-                        const step = result.step || '处理中...';
-                        const progress = result.progress || '';
-                        updateLoadingStep(`${step} ${progress}`);
-                        
-                        // 继续轮询
-                        setTimeout(poll, 1000);
-                    } else if (result.status === 'completed') {
+                } else if (result.status === 'completed') {
+                    if (!isCancelled) {
                         hideLoading();
                         showResult({
                             success: true,
                             data: result.data
                         });
-                    } else if (result.status === 'error') {
+                    }
+                } else if (result.status === 'error') {
+                    if (!isCancelled) {
                         hideLoading();
                         showResult({
                             success: false,
                             error: result.error || '处理失败'
                         });
-                    } else {
-                        // 未知状态，继续轮询
-                        setTimeout(poll, 1000);
                     }
-                } catch (error) {
-                    console.error('轮询错误:', error);
-                    // 轮询错误不立即终止，继续尝试
-                    setTimeout(poll, 2000);
+                } else {
+                    // 未知状态，继续轮询
+                    if (!isCancelled) {
+                        setTimeout(poll, 2000);
+                    }
                 }
-            };
-
-            // 开始轮询
-            poll();
-        }
-
-        // 显示结果
-        function showResult(result) {
-            const container = document.getElementById('resultContainer');
-            
-            if (result.success) {
-                container.innerHTML = formatSuccessResult(result.data);
-            } else {
-                container.innerHTML = formatErrorResult(result.error);
+            } catch (error) {
+                console.error('轮询错误:', error);
+                // 轮询错误不立即终止，继续尝试
+                if (!isCancelled) {
+                    setTimeout(poll, 5000); // 错误时等待更长时间再重试
+                }
             }
-            
-            // 滚动到结果区域
-            container.scrollIntoView({ behavior: 'smooth' });
+        };
+
+        // 开始轮询
+        poll();
+    }
+
+    // 显示结果
+    function showResult(result) {
+        const container = document.getElementById('resultContainer');
+
+        if (result.success) {
+            container.innerHTML = formatSuccessResult(result.data);
+        } else {
+            container.innerHTML = formatErrorResult(result.error);
         }
 
-        // 格式化成功结果
-        function formatSuccessResult(data) {
-            const isDirectVerification = data.direct_verification !== undefined;
-            
-            if (isDirectVerification) {
-                return `
+        // 滚动到结果区域
+        container.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // 格式化成功结果
+    function formatSuccessResult(data) {
+        const isDirectVerification = data.direct_verification !== undefined;
+
+        if (isDirectVerification) {
+            return `
                     <div class="result-card">
                         <div class="result-title">✅ 直接验证结果</div>
                         <div class="result-item">
@@ -748,18 +839,18 @@
                         </div>
                     </div>
                 `;
-            } else {
-                // 完整验证结果
-                const judgment = data.final_judgment || {};
-                const finalJudgment = judgment.final_judgment || 'uncertain';
-                const confidence = judgment.confidence || 0;
-                const evidence = data.evidence || [];
-                
-                let badgeClass = 'judgment-uncertain';
-                if (finalJudgment.toLowerCase().includes('true')) badgeClass = 'judgment-true';
-                else if (finalJudgment.toLowerCase().includes('false')) badgeClass = 'judgment-false';
-                
-                return `
+        } else {
+            // 完整验证结果
+            const judgment = data.final_judgment || {};
+            const finalJudgment = judgment.final_judgment || 'uncertain';
+            const confidence = judgment.confidence || 0;
+            const evidence = data.evidence || [];
+
+            let badgeClass = 'judgment-uncertain';
+            if (finalJudgment.toLowerCase().includes('true')) badgeClass = 'judgment-true';
+            else if (finalJudgment.toLowerCase().includes('false')) badgeClass = 'judgment-false';
+
+            return `
                     <div class="result-card">
                         <div class="result-title">📊 事实核查结果</div>
                         <div class="result-item">
@@ -798,12 +889,12 @@
                         </div>
                     </div>
                 `;
-            }
         }
+    }
 
-        // 格式化错误结果
-        function formatErrorResult(error) {
-            return `
+    // 格式化错误结果
+    function formatErrorResult(error) {
+        return `
                 <div class="result-card error">
                     <div class="result-title">❌ 处理失败</div>
                     <div class="result-item">
@@ -823,26 +914,26 @@
                     </div>
                 </div>
             `;
-        }
+    }
 
-        // HTML转义函数
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+    // HTML转义函数
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
-        // 点击模态框外部关闭
-        window.onclick = function(event) {
-            const settingsModal = document.getElementById('settingsModal');
-            if (event.target === settingsModal) {
-                closeSettings();
-            }
+    // 点击模态框外部关闭
+    window.onclick = function(event) {
+        const settingsModal = document.getElementById('settingsModal');
+        if (event.target === settingsModal) {
+            closeSettings();
         }
+    }
 
-        // 添加CSS动画
-        const style = document.createElement('style');
-        style.textContent = `
+    // 添加CSS动画
+    const style = document.createElement('style');
+    style.textContent = `
             @keyframes slideIn {
                 from {
                     transform: translateX(100%);
@@ -854,7 +945,7 @@
                 }
             }
         `;
-        document.head.appendChild(style);
-    </script>
+    document.head.appendChild(style);
+</script>
 </body>
 </html>

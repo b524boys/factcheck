@@ -17,6 +17,8 @@ import ssl
 import random
 import signal
 import atexit
+import tempfile
+from pathlib import Path
 
 from search_query_filter import filter_search_queries
 
@@ -25,7 +27,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("client.log"),
+        logging.FileHandler("client.log", encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -33,10 +35,44 @@ logging.basicConfig(
 logger = logging.getLogger("fact_check_client")
 
 
+def get_temp_dir():
+    """获取适合当前系统的临时目录"""
+    if sys.platform.startswith('win'):
+        temp_dirs = [
+            'C:/Users/Cleme/Code/Work/factcheck/temp',
+            os.path.expanduser('~/temp'),
+            tempfile.gettempdir()
+        ]
+        
+        for temp_dir in temp_dirs:
+            try:
+                Path(temp_dir).mkdir(parents=True, exist_ok=True)
+                return temp_dir
+            except:
+                continue
+        
+        local_temp = os.path.join(os.getcwd(), 'temp')
+        Path(local_temp).mkdir(parents=True, exist_ok=True)
+        return local_temp
+    else:
+        return '/tmp'
+
+
+def safe_print(message, use_emoji=True):
+    try:
+        if not use_emoji:
+            message = message.replace('✅', '[SUCCESS]')
+            message = message.replace('❌', '[ERROR]')
+            message = message.replace('🚀', '[START]')
+            message = message.replace('📊', '[RESULT]')
+            message = message.replace('⚠️', '[WARNING]')
+        print(message)
+    except UnicodeEncodeError:
+        safe_msg = ''.join(char if ord(char) < 128 else '?' for char in message)
+        print(safe_msg)
+
+
 class CircuitBreaker:
-    """
-    实现简单的断路器模式，用于防止持续请求失败的情况
-    """
 
     def __init__(self, failure_threshold=5, recovery_timeout=60):
         self.failure_threshold = failure_threshold  # 失败次数阈值
@@ -740,7 +776,7 @@ class FactCheckClient:
 
     def download_result(self, task_id, output_path):
         """
-        下载任务结果
+        下载任务结果并保存到合适的路径
 
         Args:
             task_id: 任务ID
@@ -754,6 +790,11 @@ class FactCheckClient:
             response = self._make_request('get', url, timeout=30)
 
             if response and response.status_code == 200:
+                # 确保输出路径存在
+                output_dir = os.path.dirname(output_path)
+                if output_dir and not os.path.exists(output_dir):
+                    os.makedirs(output_dir, exist_ok=True)
+                
                 with open(output_path, 'wb') as f:
                     f.write(response.content)
                 logger.info(f"结果已下载到: {output_path}")
@@ -850,9 +891,7 @@ class FactCheckClient:
 
             # 保存结果到文件(如果指定了输出路径)
             if result and output_path:
-                with open(output_path, 'w', encoding='utf-8') as f:
-                    json.dump(result, f, ensure_ascii=False, indent=2)
-                logger.info(f"直接验证结果已保存到: {output_path}")
+                self._safe_save_result(result, output_path)
 
             return result
 
@@ -910,13 +949,49 @@ class FactCheckClient:
             if not self.download_result(task_id, output_path):
                 # 如果下载失败但我们有结果，则直接保存
                 if result:
-                    with open(output_path, 'w', encoding='utf-8') as f:
-                        json.dump(result, f, ensure_ascii=False, indent=2)
-                    logger.info(f"结果已保存到: {output_path}")
+                    self._safe_save_result(result, output_path)
 
         # 清理当前任务ID
         self.current_task_id = None
         return result
+
+    def _safe_save_result(self, result, output_path):
+        """
+        安全地保存结果到文件，处理路径问题
+        
+        Args:
+            result: 结果数据
+            output_path: 输出文件路径
+        """
+        try:
+            # 处理输出路径
+            if output_path.startswith('/tmp/'):
+                # 将 /tmp/ 路径转换为适合当前系统的路径
+                temp_dir = get_temp_dir()
+                filename = os.path.basename(output_path)
+                output_path = os.path.join(temp_dir, filename)
+                logger.info(f"输出路径已调整为: {output_path}")
+            
+            # 确保输出目录存在
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            
+            # 保存结果
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            logger.info(f"结果已保存到: {output_path}")
+            
+        except Exception as e:
+            logger.error(f"保存结果时出错: {e}")
+            # 尝试保存到当前目录
+            try:
+                fallback_path = f"result_{int(time.time())}.json"
+                with open(fallback_path, 'w', encoding='utf-8') as f:
+                    json.dump(result, f, ensure_ascii=False, indent=2)
+                logger.info(f"结果已保存到备用路径: {fallback_path}")
+            except Exception as e2:
+                logger.error(f"保存到备用路径也失败: {e2}")
 
 
 def main():
@@ -953,11 +1028,11 @@ def main():
     try:
         # 如果指定了测试搜索，则只执行搜索测试
         if args.test_search:
-            print(f"\n===== 测试搜索查询: '{args.test_search}' =====")
+            safe_print(f"\n===== 测试搜索查询: '{args.test_search}' =====")
             results = client.perform_search(args.test_search)
-            print(f"找到 {len(results)} 条结果:")
+            safe_print(f"找到 {len(results)} 条结果:")
             for i, result in enumerate(results, 1):
-                print(f"\n[{i}] {result}")
+                safe_print(f"\n[{i}] {result}")
             return
 
         # 执行完整工作流程
@@ -972,30 +1047,30 @@ def main():
 
         # 打印结果摘要
         if result:
-            print("\n===== 事实核查结果摘要 =====")
+            safe_print("\n===== 事实核查结果摘要 =====")
 
             if "direct_verification" in result:
-                print(f"直接验证结果: {result['direct_verification']}")
+                safe_print(f"直接验证结果: {result['direct_verification']}")
             else:
                 judgment = result.get("final_judgment", {}).get("final_judgment", "uncertain")
                 confidence = result.get("final_judgment", {}).get("confidence", 0)
 
-                print(f"声明: {result.get('claim')}")
-                print(f"最终判断: {judgment}")
-                print(f"置信度: {confidence}")
+                safe_print(f"声明: {result.get('claim')}")
+                safe_print(f"最终判断: {judgment}")
+                safe_print(f"置信度: {confidence}")
 
                 evidence_count = len(result.get("evidence", []))
-                print(f"证据数量: {evidence_count}")
+                safe_print(f"证据数量: {evidence_count}")
 
-            print(f"\n完整结果已保存到: {args.output}")
+            safe_print(f"\n完整结果已保存到: {args.output}")
         else:
-            print("\n❌ 核查失败，请查看日志以获取详细信息")
+            safe_print("\n[ERROR] 核查失败，请查看日志以获取详细信息", use_emoji=False)
 
     except Exception as e:
         logger.critical(f"程序执行过程中发生致命错误: {str(e)}")
         logger.critical(traceback.format_exc())
-        print(f"\n❌ 程序崩溃: {str(e)}")
-        print("请查看日志获取详细信息")
+        safe_print(f"\n[ERROR] 程序崩溃: {str(e)}", use_emoji=False)
+        safe_print("请查看日志获取详细信息")
         sys.exit(1)
 
 

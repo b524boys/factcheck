@@ -16,8 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 
 @Service
 public class FactCheckService {
@@ -39,6 +38,12 @@ public class FactCheckService {
     
     // 用于存储任务状态的内存缓存
     private final Map<String, Map<String, Object>> taskStatusCache = new ConcurrentHashMap<>();
+    
+    // 缓存找到的Python命令，避免重复查找
+    private String cachedPythonCommand = null;
+    
+    // 存储运行中的进程，用于监控和清理
+    private final Map<String, Process> runningProcesses = new ConcurrentHashMap<>();
 
     public String submitTask(String claim, MultipartFile mediaFile, Boolean directVerify, String apiKey, String cseId) throws Exception {
         // 生成任务ID
@@ -67,7 +72,7 @@ public class FactCheckService {
                 executePythonScript(taskId, claim, mediaFilePath, directVerify, apiKey, cseId);
             } catch (Exception e) {
                 logger.error("执行Python脚本失败: {}", e.getMessage(), e);
-                updateTaskStatus(taskId, "error", null, e.getMessage());
+                updateTaskStatus(taskId, "error", null, getDetailedErrorMessage(-1, e.getMessage()));
             }
         });
         
@@ -97,8 +102,13 @@ public class FactCheckService {
     private void executePythonScript(String taskId, String claim, String mediaFilePath, 
                                    Boolean directVerify, String apiKey, String cseId) throws Exception {
         
+        // 使用动态查找的Python命令
+        String pythonCommand = findPythonCommand();
+        
         List<String> command = new ArrayList<>();
-        command.add("python3");
+        command.add(pythonCommand);
+        // 添加Python参数来禁用输出缓冲
+        command.add("-u");  // 无缓冲输出
         command.add(pythonScriptPath);
         command.add("--server");
         command.add(serverUrl);
@@ -126,74 +136,179 @@ public class FactCheckService {
             command.add(cseId);
         }
         
+        // 添加调试参数
+        command.add("--debug");
+        
         // 更新状态为处理中
-        updateTaskStatusInCache(taskId, "processing", "正在调用Python客户端...", null);
+        updateTaskStatusInCache(taskId, "processing", "正在启动Python客户端...", null);
         
         logger.info("执行命令: {}", String.join(" ", command));
         
         ProcessBuilder pb = new ProcessBuilder(command);
-        pb.environment().put("PYTHONPATH", "/app");
-        pb.environment().put("GOOGLE_API_KEY", apiKey != null ? apiKey : "");
-        pb.environment().put("GOOGLE_CSE_ID", cseId != null ? cseId : "");
+        // 设置工作目录
+        pb.directory(new File(System.getProperty("user.dir")));
+        
+        // 设置环境变量
+        Map<String, String> env = pb.environment();
+        env.put("PYTHONPATH", "/app");
+        env.put("GOOGLE_API_KEY", apiKey != null ? apiKey : "");
+        env.put("GOOGLE_CSE_ID", cseId != null ? cseId : "");
+        env.put("PYTHONUNBUFFERED", "1");  // 禁用Python输出缓冲
+        
+        // 重定向错误流到标准输出
+        pb.redirectErrorStream(true);
         
         Process process = pb.start();
+        runningProcesses.put(taskId, process);
         
-        // 读取输出
-        StringBuilder output = new StringBuilder();
-        StringBuilder error = new StringBuilder();
+        logger.info("Python进程已启动，PID可能为: {}", process.pid());
+        updateTaskStatusInCache(taskId, "processing", "Python进程已启动", "正在初始化...");
         
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-             BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-            
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
-                logger.info("Python输出: {}", line);
+        // 创建线程来实时读取输出
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                long lastOutputTime = System.currentTimeMillis();
                 
-                // 解析进度信息
-                if (line.contains("查询中") || line.contains("等待") || line.contains("处理")) {
-                    updateTaskStatusInCache(taskId, "processing", "正在处理...", line);
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                    logger.info("Python输出: {}", line);
+                    lastOutputTime = System.currentTimeMillis();
+                    
+                    // 解析进度信息并更新状态
+                    if (line.contains("查询中") || line.contains("等待") || line.contains("处理")) {
+                        updateTaskStatusInCache(taskId, "processing", "正在处理...", line);
+                    } else if (line.contains("提交任务成功")) {
+                        updateTaskStatusInCache(taskId, "processing", "任务已提交到服务器", line);
+                    } else if (line.contains("收到") && line.contains("查询")) {
+                        updateTaskStatusInCache(taskId, "processing", "开始执行搜索查询", line);
+                    } else if (line.contains("执行搜索查询")) {
+                        updateTaskStatusInCache(taskId, "processing", "正在执行搜索查询", line);
+                    } else if (line.contains("完成") || line.contains("结果")) {
+                        updateTaskStatusInCache(taskId, "processing", "处理即将完成", line);
+                    }
+                    
+                    // 检查是否长时间无输出（10分钟）
+                    if (System.currentTimeMillis() - lastOutputTime > 600000) {
+                        logger.warn("Python进程长时间无输出，可能卡住了");
+                        break;
+                    }
                 }
+            } catch (IOException e) {
+                logger.error("读取Python输出时出错: {}", e.getMessage());
+            }
+            return output.toString();
+        }, executor);
+        
+        // 创建一个监控线程来检查进程状态
+        CompletableFuture<Void> monitorFuture = CompletableFuture.runAsync(() -> {
+            try {
+                long startTime = System.currentTimeMillis();
+                while (process.isAlive()) {
+                    Thread.sleep(30000); // 每30秒检查一次
+                    long elapsed = (System.currentTimeMillis() - startTime) / 1000;
+                    logger.info("Python进程运行中，已运行 {} 秒", elapsed);
+                    updateTaskStatusInCache(taskId, "processing", 
+                        String.format("正在处理中，已运行 %d 分钟", elapsed / 60), 
+                        "Python进程正常运行");
+                    
+                    // 如果进程运行超过30分钟，记录警告
+                    if (elapsed > 1800) {
+                        logger.warn("Python进程运行时间过长: {} 秒", elapsed);
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.info("监控线程被中断");
+            }
+        }, executor);
+        
+        try {
+            // 等待进程完成
+            int exitCode = process.waitFor();
+            String output = outputFuture.get(10, TimeUnit.SECONDS); // 等待输出读取完成
+            
+            logger.info("Python进程退出，退出码: {}", exitCode);
+            
+            if (exitCode == 0) {
+                // 成功完成，读取结果文件
+                handleSuccessfulCompletion(taskId, output, directVerify, claim);
+            } else {
+                // 处理失败
+                String errorMsg = getDetailedErrorMessage(exitCode, output);
+                updateTaskStatus(taskId, "error", null, errorMsg);
+                logger.error("任务 {} 失败: {}", taskId, errorMsg);
             }
             
-            while ((line = errorReader.readLine()) != null) {
-                error.append(line).append("\n");
-                logger.warn("Python错误: {}", line);
+        } catch (InterruptedException e) {
+            logger.error("Python进程被中断");
+            process.destroyForcibly();
+            updateTaskStatus(taskId, "error", null, "任务被中断");
+            Thread.currentThread().interrupt();
+            
+        } catch (TimeoutException e) {
+            logger.error("等待Python输出超时");
+            // 进程可能完成了，但输出读取超时，尝试读取结果文件
+            try {
+                handleSuccessfulCompletion(taskId, "", directVerify, claim);
+            } catch (Exception ex) {
+                updateTaskStatus(taskId, "error", null, "处理完成但读取结果超时");
+            }
+            
+        } finally {
+            // 清理资源
+            runningProcesses.remove(taskId);
+            monitorFuture.cancel(true);
+            executor.shutdown();
+            
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
             }
         }
-        
-        int exitCode = process.waitFor();
-        
-        if (exitCode == 0) {
-            // 读取结果文件
-            String resultFile = "C:/temp/result_" + taskId + ".json";
+    }
+    
+    private void handleSuccessfulCompletion(String taskId, String output, Boolean directVerify, String claim) {
+        try {
+            // 首先尝试从指定路径读取结果文件
+            String resultFile = "/tmp/result_" + taskId + ".json";
+            String resultContent = null;
+            
             try {
-                String resultContent = Files.readString(Paths.get(resultFile));
-                // 如果是直接验证模式，过滤输出内容
-                if (directVerify != null && directVerify) {
-                    resultContent = filterDirectVerificationResult(resultContent, claim);
-                }
-                updateTaskStatus(taskId, "completed", resultContent, null);
-                logger.info("任务 {} 完成", taskId);
+                resultContent = Files.readString(Paths.get(resultFile));
+                logger.info("成功从文件读取结果: {}", resultFile);
             } catch (IOException e) {
-                // 如果结果文件不存在，从输出中提取结果
-                String result = output.toString().trim();
-                if (result.isEmpty()) {
-                    result = "{}";
-                } else if (directVerify != null && directVerify) {
-                    // 如果是直接验证模式，过滤输出内容
-                    result = filterDirectVerificationResult(result, claim);
+                // 如果结果文件不存在，尝试从Windows路径
+                String windowsResultFile = "C:/temp/result_" + taskId + ".json";
+                try {
+                    resultContent = Files.readString(Paths.get(windowsResultFile));
+                    logger.info("成功从Windows路径读取结果: {}", windowsResultFile);
+                } catch (IOException e2) {
+                    logger.warn("结果文件不存在，使用输出作为结果");
+                    resultContent = output.trim();
+                    if (resultContent.isEmpty()) {
+                        resultContent = "{}";
+                    }
                 }
-                updateTaskStatus(taskId, "completed", result, null);
-                logger.warn("结果文件不存在，使用输出作为结果: {}", taskId);
             }
-        } else {
-            String errorMsg = error.toString().trim();
-            if (errorMsg.isEmpty()) {
-                errorMsg = "Python脚本执行失败，退出码: " + exitCode;
+            
+            // 如果是直接验证模式，过滤输出内容
+            if (directVerify != null && directVerify) {
+                resultContent = filterDirectVerificationResult(resultContent, claim);
             }
-            updateTaskStatus(taskId, "error", null, errorMsg);
-            logger.error("任务 {} 失败: {}", taskId, errorMsg);
+            
+            updateTaskStatus(taskId, "completed", resultContent, null);
+            logger.info("任务 {} 完成", taskId);
+            
+        } catch (Exception e) {
+            logger.error("处理成功完成时出错: {}", e.getMessage(), e);
+            updateTaskStatus(taskId, "error", null, "处理结果时出错: " + e.getMessage());
         }
     }
     
@@ -279,9 +394,6 @@ public class FactCheckService {
     
     /**
      * 过滤直接验证结果，提取assistant的回复部分
-     * @param rawResult 原始结果
-     * @param claim 用户输入的声明
-     * @return 过滤后的结果
      */
     private String filterDirectVerificationResult(String rawResult, String claim) {
         try {
@@ -360,19 +472,24 @@ public class FactCheckService {
     
     /**
      * 查找可用的Python命令
-     * @return Python命令字符串
      */
     private String findPythonCommand() {
+        // 如果已经缓存了命令，直接返回
+        if (cachedPythonCommand != null) {
+            return cachedPythonCommand;
+        }
+        
         String[] possibleCommands = {"python", "python3", "py"};
         
         for (String cmd : possibleCommands) {
             try {
                 ProcessBuilder pb = new ProcessBuilder(cmd, "--version");
                 Process process = pb.start();
-                boolean finished = process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                boolean finished = process.waitFor(5, TimeUnit.SECONDS);
                 
                 if (finished && process.exitValue() == 0) {
                     logger.info("找到Python命令: {}", cmd);
+                    cachedPythonCommand = cmd;
                     return cmd;
                 }
             } catch (Exception e) {
@@ -381,14 +498,12 @@ public class FactCheckService {
         }
         
         logger.warn("未找到可用的Python命令，使用默认的 'python'");
+        cachedPythonCommand = "python";
         return "python";
     }
     
     /**
      * 根据退出码获取详细的错误信息
-     * @param exitCode 进程退出码
-     * @param originalError 原始错误信息
-     * @return 详细的错误信息
      */
     private String getDetailedErrorMessage(int exitCode, String originalError) {
         StringBuilder errorMsg = new StringBuilder();
@@ -406,7 +521,7 @@ public class FactCheckService {
                 break;
             case 2:
                 errorMsg.append("Python脚本文件未找到或无法访问。");
-                errorMsg.append("请检查main.py文件是否存在于正确位置。");
+                errorMsg.append("请检查main.py文件是否存在于正确位置: ").append(pythonScriptPath);
                 break;
             case 126:
                 errorMsg.append("Python脚本没有执行权限。");
