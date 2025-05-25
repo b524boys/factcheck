@@ -1,0 +1,62 @@
+server:
+  port: 8080
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  tomcat:
+    connection-timeout: 30000
+    keep-alive-timeout: 600000
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/nepm?useSSL=false&serverTimezone=UTC&allowMultiQueries=true&connectTimeout=60000&socketTimeout=600000
+    username: root
+    password: root
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 60000
+      idle-timeout: 1200000
+      max-lifetime: 1800000
+      leak-detection-threshold: 120000
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+  # 增加事务超时时间
+  transaction:
+    default-timeout: 1200
+
+mybatis:
+  type-aliases-package: com.factcheck.app.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    default-statement-timeout: 60
+
+logging:
+  level:
+    com.factcheck.app: DEBUG
+    org.springframework: INFO
+    com.zaxxer.hikari: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: C:/Users/Cleme/Code/Work/factcheck/logs/factcheck.log
+
+fact-check:
+  python:
+    script-path: C:/Users/Cleme/Code/Work/factcheck/main.py
+  upload:
+    dir: C:/Users/Cleme/Code/Work/factcheck/uploads
+  server:
+    url: http://workspace.featurize.cn:35407
+  timeout:
+    max-wait: 900
+    query-wait: 600
+    python-exec: 1200
