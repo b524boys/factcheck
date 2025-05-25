@@ -32,7 +32,8 @@ public class FactCheckRecordsController {
     @GetMapping("/records")
     public String recordsPage(Model model) {
         model.addAttribute("title", "事实核查记录管理");
-        return "admin/records";
+        // 修改返回值以匹配实际的模板文件名
+        return "admin/factcheck_records_page";
     }
     
     /**
