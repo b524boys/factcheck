@@ -41,25 +41,21 @@ public class FactCheckService {
     
     // 缓存找到的Python命令，避免重复查找
     private String cachedPythonCommand = null;
-    
-    // 存储运行中的进程，用于监控和清理
+
     private final Map<String, Process> runningProcesses = new ConcurrentHashMap<>();
 
     public String submitTask(String claim, MultipartFile mediaFile, Boolean directVerify, String apiKey, String cseId) throws Exception {
-        // 生成任务ID
         String taskId = UUID.randomUUID().toString().replace("-", "");
-        
-        // 保存媒体文件（如果有）
+
         final String mediaFilePath = (mediaFile != null && !mediaFile.isEmpty()) 
             ? saveMediaFile(mediaFile, taskId) 
             : null;
-        
-        // 创建数据库记录
+
         FactCheckRecord record = new FactCheckRecord();
         record.setClaim(claim);
         record.setMediaFileName(mediaFile != null ? mediaFile.getOriginalFilename() : null);
         record.setDirectVerify(directVerify);
-        record.setApiKey(maskApiKey(apiKey)); // 存储时遮蔽API密钥
+        record.setApiKey(maskApiKey(apiKey));
         record.setCseId(cseId);
         record.setTaskId(taskId);
         record.setStatus("processing");
@@ -80,19 +76,16 @@ public class FactCheckService {
     }
     
     private String saveMediaFile(MultipartFile file, String taskId) throws IOException {
-        // 创建上传目录
         Path uploadPath = Paths.get(uploadDir);
         if (!Files.exists(uploadPath)) {
             Files.createDirectories(uploadPath);
         }
         
-        // 生成文件名
         String originalFilename = file.getOriginalFilename();
         String extension = originalFilename != null && originalFilename.contains(".") 
             ? originalFilename.substring(originalFilename.lastIndexOf(".")) : "";
         String filename = taskId + "_media" + extension;
         
-        // 保存文件
         Path filePath = uploadPath.resolve(filename);
         Files.copy(file.getInputStream(), filePath);
         
@@ -102,13 +95,11 @@ public class FactCheckService {
     private void executePythonScript(String taskId, String claim, String mediaFilePath, 
                                    Boolean directVerify, String apiKey, String cseId) throws Exception {
         
-        // 使用动态查找的Python命令
         String pythonCommand = findPythonCommand();
         
         List<String> command = new ArrayList<>();
         command.add(pythonCommand);
-        // 添加Python参数来禁用输出缓冲
-        command.add("-u");  // 无缓冲输出
+        command.add("-u");
         command.add(pythonScriptPath);
         command.add("--server");
         command.add(serverUrl);
@@ -136,26 +127,21 @@ public class FactCheckService {
             command.add(cseId);
         }
         
-        // 添加调试参数
         command.add("--debug");
         
-        // 更新状态为处理中
         updateTaskStatusInCache(taskId, "processing", "正在启动Python客户端...", null);
         
         logger.info("执行命令: {}", String.join(" ", command));
         
         ProcessBuilder pb = new ProcessBuilder(command);
-        // 设置工作目录
         pb.directory(new File(System.getProperty("user.dir")));
         
-        // 设置环境变量
         Map<String, String> env = pb.environment();
         env.put("PYTHONPATH", "/app");
         env.put("GOOGLE_API_KEY", apiKey != null ? apiKey : "");
         env.put("GOOGLE_CSE_ID", cseId != null ? cseId : "");
         env.put("PYTHONUNBUFFERED", "1");  // 禁用Python输出缓冲
         
-        // 重定向错误流到标准输出
         pb.redirectErrorStream(true);
         
         Process process = pb.start();
@@ -177,7 +163,6 @@ public class FactCheckService {
                     logger.info("Python输出: {}", line);
                     lastOutputTime = System.currentTimeMillis();
                     
-                    // 解析进度信息并更新状态
                     if (line.contains("查询中") || line.contains("等待") || line.contains("处理")) {
                         updateTaskStatusInCache(taskId, "processing", "正在处理...", line);
                     } else if (line.contains("提交任务成功")) {
@@ -190,9 +175,8 @@ public class FactCheckService {
                         updateTaskStatusInCache(taskId, "processing", "处理即将完成", line);
                     }
                     
-                    // 检查是否长时间无输出（10分钟）
                     if (System.currentTimeMillis() - lastOutputTime > 600000) {
-                        logger.warn("Python进程长时间无输出，可能卡住了");
+                        logger.warn("Python进程长时间无输出");
                         break;
                     }
                 }
@@ -202,19 +186,17 @@ public class FactCheckService {
             return output.toString();
         }, executor);
         
-        // 创建一个监控线程来检查进程状态
         CompletableFuture<Void> monitorFuture = CompletableFuture.runAsync(() -> {
             try {
                 long startTime = System.currentTimeMillis();
                 while (process.isAlive()) {
-                    Thread.sleep(30000); // 每30秒检查一次
+                    Thread.sleep(30000);
                     long elapsed = (System.currentTimeMillis() - startTime) / 1000;
                     logger.info("Python进程运行中，已运行 {} 秒", elapsed);
                     updateTaskStatusInCache(taskId, "processing", 
                         String.format("正在处理中，已运行 %d 分钟", elapsed / 60), 
                         "Python进程正常运行");
                     
-                    // 如果进程运行超过30分钟，记录警告
                     if (elapsed > 1800) {
                         logger.warn("Python进程运行时间过长: {} 秒", elapsed);
                     }
@@ -226,17 +208,14 @@ public class FactCheckService {
         }, executor);
         
         try {
-            // 等待进程完成
             int exitCode = process.waitFor();
-            String output = outputFuture.get(10, TimeUnit.SECONDS); // 等待输出读取完成
+            String output = outputFuture.get(10, TimeUnit.SECONDS);
             
             logger.info("Python进程退出，退出码: {}", exitCode);
             
             if (exitCode == 0) {
-                // 成功完成，读取结果文件
                 handleSuccessfulCompletion(taskId, output, directVerify, claim);
             } else {
-                // 处理失败
                 String errorMsg = getDetailedErrorMessage(exitCode, output);
                 updateTaskStatus(taskId, "error", null, errorMsg);
                 logger.error("任务 {} 失败: {}", taskId, errorMsg);
@@ -250,7 +229,6 @@ public class FactCheckService {
             
         } catch (TimeoutException e) {
             logger.error("等待Python输出超时");
-            // 进程可能完成了，但输出读取超时，尝试读取结果文件
             try {
                 handleSuccessfulCompletion(taskId, "", directVerify, claim);
             } catch (Exception ex) {
@@ -258,7 +236,6 @@ public class FactCheckService {
             }
             
         } finally {
-            // 清理资源
             runningProcesses.remove(taskId);
             monitorFuture.cancel(true);
             executor.shutdown();
@@ -276,7 +253,6 @@ public class FactCheckService {
     
     private void handleSuccessfulCompletion(String taskId, String output, Boolean directVerify, String claim) {
         try {
-            // 首先尝试从指定路径读取结果文件
             String resultFile = "/tmp/result_" + taskId + ".json";
             String resultContent = null;
             
@@ -284,7 +260,6 @@ public class FactCheckService {
                 resultContent = Files.readString(Paths.get(resultFile));
                 logger.info("成功从文件读取结果: {}", resultFile);
             } catch (IOException e) {
-                // 如果结果文件不存在，尝试从Windows路径
                 String windowsResultFile = "C:/temp/result_" + taskId + ".json";
                 try {
                     resultContent = Files.readString(Paths.get(windowsResultFile));
@@ -298,7 +273,6 @@ public class FactCheckService {
                 }
             }
             
-            // 如果是直接验证模式，过滤输出内容
             if (directVerify != null && directVerify) {
                 resultContent = filterDirectVerificationResult(resultContent, claim);
             }
@@ -315,13 +289,11 @@ public class FactCheckService {
     public Map<String, Object> getTaskStatus(String taskId) {
         Map<String, Object> response = new HashMap<>();
         
-        // 先从缓存中获取
         Map<String, Object> cachedStatus = taskStatusCache.get(taskId);
         if (cachedStatus != null) {
             return cachedStatus;
         }
         
-        // 从数据库获取
         FactCheckRecord record = factCheckMapper.findByTaskId(taskId);
         if (record == null) {
             response.put("status", "error");
@@ -333,7 +305,6 @@ public class FactCheckService {
         
         if ("completed".equals(record.getStatus())) {
             try {
-                // 解析结果JSON
                 if (record.getResult() != null && !record.getResult().trim().isEmpty()) {
                     Object resultData = objectMapper.readValue(record.getResult(), Object.class);
                     response.put("data", resultData);
@@ -352,10 +323,8 @@ public class FactCheckService {
     }
     
     private void updateTaskStatus(String taskId, String status, String result, String errorMessage) {
-        // 更新数据库
         factCheckMapper.updateByTaskId(taskId, status, result, errorMessage);
         
-        // 更新缓存
         Map<String, Object> statusInfo = new HashMap<>();
         statusInfo.put("status", status);
         if (result != null) {
@@ -397,35 +366,28 @@ public class FactCheckService {
      */
     private String filterDirectVerificationResult(String rawResult, String claim) {
         try {
-            // 如果已经是JSON格式，直接返回
             if (rawResult.trim().startsWith("{") && rawResult.trim().endsWith("}")) {
                 return rawResult;
             }
             
-            // 查找最后一个"assistant"关键词后的内容
             String[] lines = rawResult.split("\n");
             String assistantResponse = null;
             boolean foundAssistant = false;
             
-            // 从后往前查找assistant回复
             for (int i = lines.length - 1; i >= 0; i--) {
                 String line = lines[i].trim();
                 if (line.startsWith("assistant")) {
-                    // 提取assistant后的内容
                     assistantResponse = line.substring("assistant".length()).trim();
                     foundAssistant = true;
                     break;
                 } else if (foundAssistant && !line.isEmpty() && 
                           !line.startsWith("system") && 
                           !line.startsWith("user")) {
-                    // 如果已经找到assistant但当前行不是system或user，可能是多行回复
                     assistantResponse = line;
                 }
             }
             
-            // 如果没找到assistant回复，尝试其他方法
             if (assistantResponse == null) {
-                // 查找包含判断词的行
                 for (String line : lines) {
                     String cleanLine = line.trim().toLowerCase();
                     if (cleanLine.contains("correct") || cleanLine.contains("incorrect") || 
@@ -437,7 +399,6 @@ public class FactCheckService {
                 }
             }
             
-            // 如果还是没找到，使用最后一行非空内容
             if (assistantResponse == null) {
                 for (int i = lines.length - 1; i >= 0; i--) {
                     if (!lines[i].trim().isEmpty()) {
@@ -456,7 +417,6 @@ public class FactCheckService {
             
         } catch (Exception e) {
             logger.error("过滤直接验证结果时出错: {}", e.getMessage());
-            // 出错时返回简化的结果
             try {
                 Map<String, Object> fallbackResult = new HashMap<>();
                 fallbackResult.put("direct_verification", rawResult.length() > 100 ? 
@@ -474,7 +434,6 @@ public class FactCheckService {
      * 查找可用的Python命令
      */
     private String findPythonCommand() {
-        // 如果已经缓存了命令，直接返回
         if (cachedPythonCommand != null) {
             return cachedPythonCommand;
         }

@@ -598,7 +598,6 @@
             loadStats();
             loadRecords();
             
-            // Add search input event listener
             document.getElementById('searchInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     loadRecords();
@@ -606,7 +605,6 @@
             });
         });
 
-        // Load statistics
         async function loadStats() {
             try {
                 const response = await fetch('/admin/api/records/stats');
@@ -735,12 +733,10 @@
             
             let paginationHtml = '';
             
-            // Previous button
             if (pagination.hasPrev) {
                 paginationHtml += `<button class="btn btn-secondary" onclick="loadRecords(${pagination.current - 1})">‹ 上一页</button>`;
             }
             
-            // Page numbers
             const startPage = Math.max(1, pagination.current - 2);
             const endPage = Math.min(pagination.totalPages, pagination.current + 2);
             
@@ -763,12 +759,10 @@
                 paginationHtml += `<button class="btn btn-secondary" onclick="loadRecords(${pagination.totalPages})">${pagination.totalPages}</button>`;
             }
             
-            // Next button
             if (pagination.hasNext) {
                 paginationHtml += `<button class="btn btn-secondary" onclick="loadRecords(${pagination.current + 1})">下一页 ›</button>`;
             }
             
-            // Page info
             paginationHtml += `<span style="margin-left: 20px; color: #666;">
                 第 ${pagination.current} 页，共 ${pagination.totalPages} 页，总计 ${pagination.total} 条记录
             </span>`;
@@ -776,7 +770,6 @@
             container.innerHTML = paginationHtml;
         }
 
-        // Toggle record selection
         function toggleRecordSelection(recordId) {
             const checkbox = document.querySelector(`input[value="${recordId}"]`);
             if (checkbox.checked) {
@@ -787,7 +780,6 @@
             updateBatchControls();
         }
 
-        // Toggle select all
         function toggleSelectAll() {
             const headerCheckbox = document.getElementById('headerCheckbox');
             const checkboxes = document.querySelectorAll('.record-checkbox');
@@ -805,7 +797,6 @@
             updateBatchControls();
         }
 
-        // Update batch controls
         function updateBatchControls() {
             const batchControls = document.getElementById('batchControls');
             const batchDeleteBtn = document.getElementById('batchDeleteBtn');
@@ -821,7 +812,6 @@
             }
         }
 
-        // View record detail
         async function viewDetail(recordId) {
             try {
                 const response = await fetch(`/admin/api/records/${recordId}`);
@@ -903,7 +893,6 @@
             `;
         }
 
-        // Delete single record
         async function deleteRecord(recordId) {
             if (!confirm('确认删除这条记录吗？此操作不可恢复。')) {
                 return;
@@ -922,7 +911,7 @@
                 
                 showAlert('记录删除成功', 'success');
                 loadRecords(currentPage);
-                loadStats(); // Refresh stats
+                loadStats();
                 
             } catch (error) {
                 console.error('Failed to delete record:', error);
@@ -930,7 +919,6 @@
             }
         }
 
-        // Batch delete
         async function batchDelete() {
             if (selectedRecords.size === 0) {
                 showAlert('请先选择要删除的记录', 'error');
@@ -961,7 +949,7 @@
                 showAlert(`成功删除 ${result.deletedCount} 条记录`, 'success');
                 selectedRecords.clear();
                 loadRecords(currentPage);
-                loadStats(); // Refresh stats
+                loadStats();
                 
             } catch (error) {
                 console.error('Failed to batch delete:', error);
@@ -969,7 +957,6 @@
             }
         }
 
-        // Retry task
         async function retryTask(recordId) {
             if (!confirm('确认重新执行这个核查任务吗？')) {
                 return;
@@ -995,12 +982,10 @@
             }
         }
 
-        // Close modal
         function closeModal() {
             document.getElementById('detailModal').style.display = 'none';
         }
 
-        // Show alert
         function showAlert(message, type) {
             const alertContainer = document.getElementById('alertContainer');
             const alertClass = type === 'success' ? 'alert-success' : 'alert-error';
@@ -1011,13 +996,11 @@
                 </div>
             `;
             
-            // Auto hide after 5 seconds
             setTimeout(() => {
                 alertContainer.innerHTML = '';
             }, 5000);
         }
 
-        // Get status icon
         function getStatusIcon(status) {
             switch (status) {
                 case 'processing':
@@ -1031,14 +1014,12 @@
             }
         }
 
-        // Escape HTML
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
-        // Close modal when clicking outside
         window.onclick = function(event) {
             const modal = document.getElementById('detailModal');
             if (event.target === modal) {

@@ -499,19 +499,16 @@
 </div>
 
 <script>
-    // 全局变量
     let currentTaskId = null;
     let checkInterval = null;
     let startTime = null;
     let timeInterval = null;
     let isCancelled = false;
 
-    // 页面加载时检查API配置
     document.addEventListener('DOMContentLoaded', function() {
         checkApiConfiguration();
     });
-
-    // 检查API配置状态
+    // 弹窗相关
     function checkApiConfiguration() {
         const apiKey = localStorage.getItem('googleApiKey');
         const cseId = localStorage.getItem('googleCseId');
@@ -526,25 +523,21 @@
         }
     }
 
-    // 打开设置弹窗
     function openSettings() {
         const modal = document.getElementById('settingsModal');
         const apiKeyInput = document.getElementById('apiKey');
         const cseIdInput = document.getElementById('cseId');
 
-        // 填充现有值
         apiKeyInput.value = localStorage.getItem('googleApiKey') || '';
         cseIdInput.value = localStorage.getItem('googleCseId') || '';
 
         modal.style.display = 'block';
     }
 
-    // 关闭设置弹窗
     function closeSettings() {
         document.getElementById('settingsModal').style.display = 'none';
     }
 
-    // 保存设置
     function saveSettings() {
         const apiKey = document.getElementById('apiKey').value.trim();
         const cseId = document.getElementById('cseId').value.trim();
@@ -585,30 +578,26 @@
         }, 3000);
     }
 
-    // 显示加载状态
+    // 加载状态
     function showLoading(text = '正在处理您的请求...', step = '准备中') {
         document.getElementById('loadingText').textContent = text;
         document.getElementById('loadingStep').textContent = step;
         document.getElementById('loadingModal').style.display = 'block';
 
-        // 开始计时
         startTime = new Date();
         updateElapsedTime();
         timeInterval = setInterval(updateElapsedTime, 1000);
     }
 
-    // 隐藏加载状态
     function hideLoading() {
         document.getElementById('loadingModal').style.display = 'none';
 
-        // 停止计时
         if (timeInterval) {
             clearInterval(timeInterval);
             timeInterval = null;
         }
     }
 
-    // 更新已等待时间
     function updateElapsedTime() {
         if (!startTime) return;
 
@@ -621,12 +610,10 @@
             `已等待：${minutes} 分钟 ${seconds} 秒`;
     }
 
-    // 更新加载步骤
     function updateLoadingStep(step) {
         document.getElementById('loadingStep').textContent = step;
     }
 
-    // 取消任务
     function cancelTask() {
         isCancelled = true;
         if (checkInterval) {
@@ -636,7 +623,6 @@
         hideLoading();
         showNotification('任务已取消', 'info');
 
-        // 重置按钮状态
         const submitBtn = document.getElementById('submitBtn');
         submitBtn.disabled = false;
         submitBtn.textContent = '🚀 开始事实核查';
@@ -652,7 +638,6 @@
             return;
         }
 
-        // 检查API配置
         const apiKey = localStorage.getItem('googleApiKey');
         const cseId = localStorage.getItem('googleCseId');
         const directVerify = document.getElementById('directVerify').checked;
@@ -663,10 +648,8 @@
             return;
         }
 
-        // 重置取消状态
         isCancelled = false;
 
-        // 禁用提交按钮
         const submitBtn = document.getElementById('submitBtn');
         submitBtn.disabled = true;
         submitBtn.textContent = '处理中...';
@@ -682,7 +665,6 @@
                 });
             }
         } finally {
-            // 重新启用提交按钮
             if (!isCancelled) {
                 submitBtn.disabled = false;
                 submitBtn.textContent = '🚀 开始事实核查';
@@ -724,7 +706,6 @@
                 currentTaskId = result.taskId;
                 updateLoadingStep('任务已提交，等待处理...');
 
-                // 开始轮询任务状态（无时间限制）
                 await pollTaskStatus();
             } else if (!isCancelled) {
                 throw new Error(result.error || '提交失败');
@@ -737,7 +718,6 @@
         }
     }
 
-    // 轮询任务状态（移除时间限制）
     async function pollTaskStatus() {
         if (!currentTaskId || isCancelled) return;
 
@@ -758,9 +738,8 @@
                     const progress = result.progress || '';
                     updateLoadingStep(`${step} ${progress}`);
 
-                    // 继续轮询，无时间限制
                     if (!isCancelled) {
-                        setTimeout(poll, 2000); // 增加轮询间隔到2秒，减少服务器压力
+                        setTimeout(poll, 2000); // 轮询间隔2秒
                     }
                 } else if (result.status === 'completed') {
                     if (!isCancelled) {
@@ -779,21 +758,18 @@
                         });
                     }
                 } else {
-                    // 未知状态，继续轮询
                     if (!isCancelled) {
                         setTimeout(poll, 2000);
                     }
                 }
             } catch (error) {
                 console.error('轮询错误:', error);
-                // 轮询错误不立即终止，继续尝试
                 if (!isCancelled) {
-                    setTimeout(poll, 5000); // 错误时等待更长时间再重试
+                    setTimeout(poll, 5000);
                 }
             }
         };
 
-        // 开始轮询
         poll();
     }
 
@@ -807,40 +783,83 @@
             container.innerHTML = formatErrorResult(result.error);
         }
 
-        // 滚动到结果区域
         container.scrollIntoView({ behavior: 'smooth' });
     }
 
-    // 格式化成功结果
     function formatSuccessResult(data) {
         const isDirectVerification = data.direct_verification !== undefined;
 
         if (isDirectVerification) {
+            let directResult = data.direct_verification;
+            let judgment = 'uncertain';
+            let confidence = 0;
+            
+            if (typeof directResult === 'string') {
+                try {
+                    const jsonStr = directResult.replace(/'/g, '"');
+                    directResult = JSON.parse(jsonStr);
+                } catch (e) {
+                    console.error('解析直接验证结果失败:', e);
+                    const confidenceMatch = directResult.match(/'confidence':\s*([0-9.]+)/);
+                    const judgmentMatch = directResult.match(/'judgment':\s*'([^']+)'/);
+                    
+                    if (confidenceMatch) confidence = parseFloat(confidenceMatch[1]);
+                    if (judgmentMatch) judgment = judgmentMatch[1];
+                }
+            }
+            
+            if (typeof directResult === 'object' && directResult !== null) {
+                judgment = directResult.judgment || judgment;
+                confidence = directResult.confidence || confidence;
+            }
+            
+            let badgeClass = 'judgment-uncertain';
+            let displayJudgment = judgment;
+            
+            if (judgment === 'correct' || judgment === 'true') {
+                badgeClass = 'judgment-true';
+                displayJudgment = '正确';
+            } else if (judgment === 'incorrect' || judgment === 'false') {
+                badgeClass = 'judgment-false';
+                displayJudgment = '错误';
+            } else if (judgment === 'unrelated') {
+                badgeClass = 'judgment-uncertain';
+                displayJudgment = '无关';
+            } else {
+                displayJudgment = '不确定';
+            }
+
             return `
-                    <div class="result-card">
-                        <div class="result-title">✅ 直接验证结果</div>
-                        <div class="result-item">
-                            <div class="result-label">声明:</div>
-                            <div class="result-value">${escapeHtml(data.claim || '未知')}</div>
-                        </div>
-                        <div class="result-item">
-                            <div class="result-label">验证结果:</div>
-                            <div class="result-value">${escapeHtml(data.direct_verification)}</div>
-                        </div>
-                        ${data.reasoning ? `
-                            <div class="result-item">
-                                <div class="result-label">分析过程:</div>
-                                <div class="result-value">${escapeHtml(data.reasoning)}</div>
-                            </div>
-                        ` : ''}
-                        <div class="result-item">
-                            <div class="result-label">处理时间:</div>
-                            <div class="result-value">${new Date().toLocaleString('zh-CN')}</div>
+                <div class="result-card">
+                    <div class="result-title">🤖 直接验证结果</div>
+                    <div class="result-item">
+                        <div class="result-label">声明:</div>
+                        <div class="result-value">${escapeHtml(data.claim || '未知')}</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">AI判断:</div>
+                        <div class="result-value">
+                            ${displayJudgment}
+                            <span class="judgment-badge ${badgeClass}">${displayJudgment}</span>
                         </div>
                     </div>
-                `;
+                    <div class="result-item">
+                        <div class="result-label">置信度: ${Math.round(confidence * 100)}%</div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${confidence * 100}%"></div>
+                        </div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">验证方式:</div>
+                        <div class="result-value">AI直接分析（无需外部搜索）</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">处理时间:</div>
+                        <div class="result-value">${new Date().toLocaleString('zh-CN')}</div>
+                    </div>
+                </div>
+            `;
         } else {
-            // 完整验证结果
             const judgment = data.final_judgment || {};
             const finalJudgment = judgment.final_judgment || 'uncertain';
             const confidence = judgment.confidence || 0;
@@ -892,7 +911,6 @@
         }
     }
 
-    // 格式化错误结果
     function formatErrorResult(error) {
         return `
                 <div class="result-card error">
@@ -916,14 +934,12 @@
             `;
     }
 
-    // HTML转义函数
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
 
-    // 点击模态框外部关闭
     window.onclick = function(event) {
         const settingsModal = document.getElementById('settingsModal');
         if (event.target === settingsModal) {
@@ -931,7 +947,7 @@
         }
     }
 
-    // 添加CSS动画
+    // CSS动画
     const style = document.createElement('style');
     style.textContent = `
             @keyframes slideIn {

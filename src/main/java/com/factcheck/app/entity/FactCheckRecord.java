@@ -17,21 +17,17 @@ public class FactCheckRecord {
     private LocalDateTime createTime;   // 创建时间
     private LocalDateTime updateTime;   // 更新时间
     
-    // 默认构造函数
     public FactCheckRecord() {
         this.createTime = LocalDateTime.now();
         this.updateTime = LocalDateTime.now();
     }
     
-    // 带参构造函数
     public FactCheckRecord(String taskId, String claim) {
         this();
         this.taskId = taskId;
         this.claim = claim;
         this.status = "processing";
     }
-    
-    // Getter and Setter methods
     
     public Long getId() {
         return id;
@@ -95,7 +91,7 @@ public class FactCheckRecord {
     
     public void setStatus(String status) {
         this.status = status;
-        this.updateTime = LocalDateTime.now(); // 状态更新时自动更新时间
+        this.updateTime = LocalDateTime.now();
     }
     
     public String getResult() {

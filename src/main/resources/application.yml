@@ -5,8 +5,8 @@ server:
       max-file-size: 100MB
       max-request-size: 100MB
   tomcat:
-    connection-timeout: 60000     # HTTP连接超时：60秒
-    keep-alive-timeout: 1800000   # Keep-Alive超时：30分钟
+    connection-timeout: 60000
+    keep-alive-timeout: 1800000
 
 spring:
   datasource:
@@ -18,9 +18,9 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 5
       connection-timeout: 60000
-      idle-timeout: 1800000       # 空闲超时：30分钟
-      max-lifetime: 3600000       # 最大生命周期：1小时
-      leak-detection-threshold: 300000  # 泄漏检测：5分钟
+      idle-timeout: 1800000
+      max-lifetime: 3600000
+      leak-detection-threshold: 300000  
 
   servlet:
     multipart:
@@ -28,9 +28,8 @@ spring:
       max-file-size: 100MB
       max-request-size: 100MB
 
-  # 移除事务超时限制
   transaction:
-    default-timeout: 0  # 0表示无超时限制
+    default-timeout: 0
 
 mybatis:
   type-aliases-package: com.factcheck.app.entity
@@ -56,8 +55,8 @@ fact-check:
     dir: C:/Users/Cleme/Code/Work/factcheck/uploads
   server:
     url: http://workspace.featurize.cn:35407
-  # 移除或大幅增加超时限制
+  # 被动等待python脚本执行完成
   timeout:
-    max-wait: 0           # 0表示无限等待
-    query-wait: 0         # 0表示无限等待
-    python-exec: 0        # 0表示无限等待
+    max-wait: 0           
+    query-wait: 0         
+    python-exec: 0        

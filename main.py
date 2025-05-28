@@ -75,11 +75,11 @@ def safe_print(message, use_emoji=True):
 class CircuitBreaker:
 
     def __init__(self, failure_threshold=5, recovery_timeout=60):
-        self.failure_threshold = failure_threshold  # 失败次数阈值
-        self.recovery_timeout = recovery_timeout  # 恢复超时时间(秒)
-        self.failure_count = 0  # 当前失败计数
-        self.last_failure_time = 0  # 上次失败时间
-        self.state = "CLOSED"  # 断路器状态: CLOSED, OPEN, HALF-OPEN
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time = 0
+        self.state = "CLOSED"
 
     def record_success(self):
         """记录成功请求"""
@@ -103,15 +103,12 @@ class CircuitBreaker:
         """
         now = time.time()
 
-        # 断路器打开状态
         if self.state == "OPEN":
-            # 检查是否超过恢复超时时间
             if now - self.last_failure_time > self.recovery_timeout:
-                self.state = "HALF-OPEN"  # 进入半开状态允许一次尝试
+                self.state = "HALF-OPEN"
                 return True
-            return False  # 仍在超时期内，拒绝请求
+            return False
 
-        # 断路器关闭或半开状态都允许请求
         return True
 
     def __str__(self):
@@ -136,34 +133,26 @@ class FactCheckClient:
         self.max_retries = max_retries
         self.max_workers = max_workers
 
-        # 添加声明缓存
-        self.claim_cache = {}  # 用于存储任务ID和对应的声明
+        self.claim_cache = {}
 
-        # 当前正在处理的任务ID，用于清理
         self.current_task_id = None
 
-        # 添加断路器
         self.search_circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=120)
 
-        # 增强Http会话，提供重试机制
         self.session = self._create_robust_session()
 
-        # 检查API密钥和搜索引擎ID
         if not self.api_key or not self.search_engine_id:
             logger.warning("未设置Google API密钥或搜索引擎ID！将无法执行搜索查询")
             self.search = None
             self.search_tool = None
         else:
-            # 设置环境变量
             os.environ["GOOGLE_API_KEY"] = self.api_key
             os.environ["GOOGLE_CSE_ID"] = self.search_engine_id
 
             try:
-                # 初始化搜索工具
                 logger.info(f"初始化GoogleSearchAPIWrapper，返回前5条结果...")
                 self.search = GoogleSearchAPIWrapper(k=5)
 
-                # 使用Tool包装搜索功能
                 self.search_tool = Tool(
                     name="Google Search",
                     description="Search Google for recent results.",
@@ -176,7 +165,6 @@ class FactCheckClient:
                 self.search = None
                 self.search_tool = None
 
-        # 注册清理函数
         self._register_cleanup_handlers()
 
     def _register_cleanup_handlers(self):
@@ -191,11 +179,9 @@ class FactCheckClient:
             logger.info("程序正常退出，正在清理资源...")
             self._cleanup_on_exit()
 
-        # 注册信号处理器
-        signal.signal(signal.SIGINT, cleanup_handler)  # Ctrl+C
-        signal.signal(signal.SIGTERM, cleanup_handler)  # 终止信号
+        signal.signal(signal.SIGINT, cleanup_handler)
+        signal.signal(signal.SIGTERM, cleanup_handler)
 
-        # 注册退出时清理
         atexit.register(cleanup_at_exit)
 
     def _cleanup_on_exit(self):
@@ -224,7 +210,6 @@ class FactCheckClient:
         from requests.adapters import HTTPAdapter
         from urllib3.util.retry import Retry
 
-        # 定义重试策略
         retry_strategy = Retry(
             total=self.max_retries,
             backoff_factor=0.5,
@@ -232,7 +217,6 @@ class FactCheckClient:
             allowed_methods=["GET", "POST"]
         )
 
-        # 创建会话并挂载适配器
         session = requests.Session()
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("http://", adapter)
@@ -252,17 +236,15 @@ class FactCheckClient:
         Returns:
             响应对象或None(如果所有重试都失败)
         """
-        # 设置默认超时和重试次数
         kwargs.setdefault('timeout', 120)
         retries = kwargs.pop('retries', self.max_retries)
 
-        # 默认请求函数
         request_func = getattr(self.session, method.lower())
 
         for attempt in range(retries + 1):
             try:
                 if attempt > 0:
-                    delay = 2 ** (attempt - 1)  # 指数退避策略
+                    delay = 2 ** (attempt - 1)
                     logger.info(f"第 {attempt} 次重试，等待 {delay} 秒...")
                     time.sleep(delay)
 
@@ -280,7 +262,6 @@ class FactCheckClient:
                 logger.warning(f"连接错误: {e}")
                 if "RemoteDisconnected" in str(e) or "ConnectionResetError" in str(e):
                     logger.warning("服务器断开连接，可能是服务器忙或请求太大")
-                    # 增加超时时间
                     kwargs['timeout'] = kwargs.get('timeout', 120) + 60
 
                 if attempt == retries:
@@ -323,17 +304,14 @@ class FactCheckClient:
             task_id 或 None(如果出错)
         """
         try:
-            # 准备请求数据
             data = {'claim': claim}
             files = {}
 
             if media_path and os.path.exists(media_path):
-                # 获取文件大小，用于打印日志
-                file_size = os.path.getsize(media_path) / (1024 * 1024)  # 转换为MB
+                file_size = os.path.getsize(media_path) / (1024 * 1024)
                 logger.info(f"正在准备上传媒体文件: {media_path} (大小: {file_size:.2f} MB)")
 
-                # 对于大文件，使用更长的超时时间
-                timeout = max(120, int(file_size * 3))  # 根据文件大小设置超时时间，最少120秒
+                timeout = max(120, int(file_size * 3))
                 logger.info(f"设置超时时间为 {timeout} 秒")
 
                 files['media'] = (os.path.basename(media_path), open(media_path, 'rb'))
@@ -341,16 +319,13 @@ class FactCheckClient:
                 logger.error(f"媒体文件不存在: {media_path}")
                 return None
 
-            # 发送请求
             url = urljoin(self.server_url, "submit_task")
 
-            # 在请求中使用流式上传模式，避免内存问题
             logger.info("开始上传文件和提交任务...")
             response = self._make_request('post', url, data=data, files=files,
                                           timeout=timeout if 'timeout' in locals() else 180,
                                           stream=True)
 
-            # 关闭文件
             if media_path and os.path.exists(media_path) and 'media' in files:
                 files['media'][1].close()
 
@@ -359,11 +334,9 @@ class FactCheckClient:
                 task_id = result.get('task_id')
                 logger.info(f"任务提交成功，任务ID: {task_id}")
 
-                # 缓存声明
                 self.claim_cache[task_id] = claim
                 logger.info(f"已缓存声明: '{claim}' 对应任务ID: {task_id}")
 
-                # 设置当前任务ID
                 self.current_task_id = task_id
 
                 return task_id
@@ -372,7 +345,6 @@ class FactCheckClient:
                 error_text = response.text if response else "无响应"
                 logger.error(f"任务提交失败: {status_code} - {error_text}")
 
-                # 更详细的错误分析
                 if response and response.status_code == 413:
                     logger.error("文件可能太大，超出服务器限制")
                 elif not response:
@@ -404,22 +376,17 @@ class FactCheckClient:
             logger.info(f"正在搜索: '{query}'")
             start_time = time.time()
 
-            # 执行搜索
             result = self.search_tool.run(query)
 
             elapsed_time = time.time() - start_time
             logger.info(f"搜索完成，耗时: {elapsed_time:.2f}秒")
 
-            # 处理结果
             if result:
-                # 分析结果并分成段落
                 paragraphs = [p.strip() for p in result.split("\n\n") if p.strip()]
 
-                # 如果没有得到明确的段落，尝试通过句号拆分
                 if len(paragraphs) <= 1 and len(result) > 100:
                     paragraphs = [s.strip() + "." for s in result.split(". ") if s.strip()]
 
-                # 确保我们至少返回原始结果
                 if not paragraphs:
                     paragraphs = [result]
 
@@ -437,24 +404,20 @@ class FactCheckClient:
                 http.client.IncompleteRead,
                 ConnectionResetError,
                 ssl.SSLError) as e:
-            # 特定的网络连接错误处理
             error_type = type(e).__name__
             logger.error(f"搜索查询 '{query}' 发生网络错误: {error_type} - {str(e)}")
 
             if retry < self.max_retries:
-                # 计算退避时间，添加随机抖动防止同时重试
-                base_delay = min(30, 2 ** retry)  # 最大等待30秒
-                jitter = random.uniform(0, 1)  # 添加0到1秒的随机抖动
+                base_delay = min(30, 2 ** retry)
+                jitter = random.uniform(0, 1)
                 delay = base_delay + jitter
 
                 logger.info(f"网络错误，等待 {delay:.2f} 秒后重试 ({retry + 1}/{self.max_retries})...")
                 time.sleep(delay)
 
-                # 如果是SSL相关错误，尝试重新初始化搜索工具
                 if isinstance(e, ssl.SSLError) or "SSL" in str(e):
                     logger.info("检测到SSL错误，尝试重新初始化搜索工具...")
                     try:
-                        # 重新初始化搜索工具
                         self.search = GoogleSearchAPIWrapper(k=5)
                         self.search_tool = Tool(
                             name="Google Search",
@@ -470,13 +433,11 @@ class FactCheckClient:
             return []
 
         except Exception as e:
-            # 其他类型的错误
             logger.error(f"搜索查询 '{query}' 出错: {str(e)}")
             logger.debug(traceback.format_exc())
 
             if retry < self.max_retries:
-                # 计算退避时间
-                delay = 2 ** retry + random.uniform(0, 1)  # 指数退避+随机抖动
+                delay = 2 ** retry + random.uniform(0, 1)
                 logger.info(f"搜索失败，等待 {delay:.2f} 秒后重试 ({retry + 1}/{self.max_retries})...")
                 time.sleep(delay)
                 return self.perform_search(query, retry + 1)
@@ -495,11 +456,9 @@ class FactCheckClient:
             True成功，False失败
         """
         try:
-            # 循环检查查询，使用可配置的等待时间
             start_time = time.time()
-            claim = None  # 用于存储任务的claim内容
+            claim = None
 
-            # 尝试从缓存中获取声明
             if task_id in self.claim_cache:
                 claim = self.claim_cache[task_id]
                 logger.info(f"从缓存中获取到声明: '{claim}'")
@@ -507,7 +466,6 @@ class FactCheckClient:
             logger.info(f"等待服务器处理任务，最长等待 {max_wait_time} 秒...")
 
             while time.time() - start_time < max_wait_time:
-                # 获取查询列表和claim
                 url = urljoin(self.server_url, f"get_queries/{task_id}")
                 response = self._make_request('get', url, timeout=30)
 
@@ -521,11 +479,9 @@ class FactCheckClient:
 
                 result = response.json()
 
-                # 如果尚未从缓存获取claim，尝试从响应中提取
                 if not claim and "claim" in result:
                     claim = result.get("claim")
                     logger.info(f"从服务器响应获取到声明: '{claim}'")
-                    # 更新缓存
                     self.claim_cache[task_id] = claim
 
                 if result.get("status") == "error":
@@ -544,7 +500,6 @@ class FactCheckClient:
                     queries = result.get("queries", [])
                     queries = filter_search_queries(queries)
 
-                    # 将claim添加到查询列表（如果不存在）
                     if claim and claim not in queries:
                         queries.append(claim)
                         logger.info(f"将声明添加到查询列表: '{claim}'")
@@ -558,40 +513,31 @@ class FactCheckClient:
                     logger.info(f"收到 {total_queries} 个需要处理的查询")
                     break
 
-                # 其他状态，等待片刻后重试
                 elapsed = int(time.time() - start_time)
                 remaining = max_wait_time - elapsed
                 logger.warning(
                     f"任务状态为 '{result.get('status')}', 已等待 {elapsed}s，剩余 {remaining}s，等待10秒后重试...")
                 time.sleep(10)
 
-            # 如果循环结束但没有成功获取查询
             if not 'queries' in locals() or not queries:
                 logger.error(f"等待超时({max_wait_time}秒)，无法获取查询")
                 return False
 
-            # 使用线程池并行执行查询
             query_results = {}
 
-            # 如果断路器打开，警告并返回空结果
             if not self.search_circuit_breaker.can_execute():
                 logger.warning("搜索断路器已打开，跳过所有搜索查询。系统将在稍后尝试恢复。")
-                # 返回空结果集
                 for query in queries:
                     query_results[query] = []
-                # 继续流程，不执行搜索
             else:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    # 直接使用原始查询，不进行增强
                     future_to_query = {
                         executor.submit(self.perform_search, query): query
                         for query in queries
                     }
 
-                    # 收集查询失败计数
                     search_failures = 0
 
-                    # 使用tqdm创建进度条
                     with tqdm(total=len(future_to_query), desc="执行搜索查询", unit="query") as pbar:
                         for future in concurrent.futures.as_completed(future_to_query):
                             query = future_to_query[future]
@@ -599,8 +545,7 @@ class FactCheckClient:
                                 results = future.result()
                                 query_results[query] = results
 
-                                # 记录成功
-                                if results:  # 只有返回非空结果才算成功
+                                if results:
                                     self.search_circuit_breaker.record_success()
                                     logger.info(f"查询 '{query}' 成功获取 {len(results)} 条结果")
                                 else:
@@ -609,20 +554,16 @@ class FactCheckClient:
                                 logger.error(f"处理查询 '{query}' 时出错: {e}")
                                 query_results[query] = []
 
-                                # 记录失败
                                 self.search_circuit_breaker.record_failure()
                                 search_failures += 1
                             pbar.update(1)
 
-                    # 如果失败太多，记录警告
                     if search_failures > len(queries) // 2:
                         logger.warning(
                             f"超过一半的查询失败 ({search_failures}/{len(queries)})，断路器状态: {self.search_circuit_breaker}")
 
-            # 提交查询结果（使用改进的提交机制）
             logger.info(f"正在提交 {len(query_results)} 个查询的结果")
 
-            # 使用新的确认机制提交结果
             success = self.submit_query_results_with_confirmation(task_id, query_results)
 
             if success:
@@ -651,7 +592,6 @@ class FactCheckClient:
         """
         submit_url = urljoin(self.server_url, f"submit_query_results/{task_id}")
 
-        # 跟踪未成功提交的查询
         pending_results = dict(query_results)
         all_successfully_received = []
 
@@ -662,7 +602,6 @@ class FactCheckClient:
 
             logger.info(f"尝试提交 {len(pending_results)} 个查询结果（第 {attempt + 1} 次尝试）")
 
-            # 分批提交，但保持合理的批次大小
             batch_size = 20
             queries_to_submit = list(pending_results.keys())
 
@@ -671,38 +610,30 @@ class FactCheckClient:
                 batch_results = {q: pending_results[q] for q in batch_queries}
 
                 try:
-                    # 提交这批查询
                     response = self._make_request('post', submit_url, json=batch_results, timeout=60)
 
                     if response and response.status_code == 200:
                         result = response.json()
 
-                        # 处理确认信息
                         successfully_received = result.get("successfully_received", [])
                         failed_queries = result.get("failed_queries", [])
 
                         logger.info(f"批次提交结果: 成功 {len(successfully_received)}, 失败 {len(failed_queries)}")
 
-                        # 从待提交列表中移除成功的查询
                         for query in successfully_received:
                             if query in pending_results:
                                 del pending_results[query]
                                 all_successfully_received.append(query)
-
-                        # 检查是否所有查询都已完成
                         if result.get("all_completed", False):
                             logger.info("服务器确认所有查询已完成，开始验证流程")
                             return True
                     else:
-                        # HTTP错误，这批全部需要重试
                         logger.error(f"批次提交失败: HTTP {response.status_code if response else '无响应'}")
 
                 except Exception as e:
                     logger.error(f"提交批次时出错: {e}")
 
-            # 如果还有未成功的查询，等待后重试
             if pending_results and attempt < max_retries - 1:
-                # 先尝试从服务器获取已接收的查询列表，以防响应丢失
                 try:
                     check_url = urljoin(self.server_url, f"get_received_queries/{task_id}")
                     check_response = self._make_request('get', check_url, timeout=30)
@@ -711,7 +642,6 @@ class FactCheckClient:
                         result = check_response.json()
                         received_queries = result.get("received_queries", [])
 
-                        # 更新待提交列表
                         for query in list(pending_results.keys()):
                             if query in received_queries:
                                 logger.info(f"查询 '{query}' 已被服务器接收（通过确认检查）")
@@ -723,16 +653,14 @@ class FactCheckClient:
                     logger.warning(f"检查已接收查询时出错: {e}")
 
                 if pending_results:
-                    wait_time = min(10 * (attempt + 1), 30)  # 递增等待时间，最多30秒
+                    wait_time = min(10 * (attempt + 1), 30)
                     logger.warning(f"还有 {len(pending_results)} 个查询未成功提交，{wait_time}秒后重试...")
                     time.sleep(wait_time)
 
-        # 达到最大重试次数
         if pending_results:
             logger.error(f"达到最大重试次数，仍有 {len(pending_results)} 个查询未能提交")
-            logger.error(f"未提交的查询: {list(pending_results.keys())[:5]}...")  # 只显示前5个
+            logger.error(f"未提交的查询: {list(pending_results.keys())[:5]}...")
 
-            # 保存未提交的结果到本地文件，以便后续恢复
             failed_results_path = f"failed_results_{task_id}_{int(time.time())}.json"
             try:
                 with open(failed_results_path, 'w', encoding='utf-8') as f:
@@ -745,7 +673,6 @@ class FactCheckClient:
             except Exception as e:
                 logger.error(f"保存失败结果时出错: {e}")
 
-        # 返回是否全部成功
         return len(pending_results) == 0
 
     def check_task_status(self, task_id):
@@ -790,7 +717,6 @@ class FactCheckClient:
             response = self._make_request('get', url, timeout=30)
 
             if response and response.status_code == 200:
-                # 确保输出路径存在
                 output_dir = os.path.dirname(output_path)
                 if output_dir and not os.path.exists(output_dir):
                     os.makedirs(output_dir, exist_ok=True)
@@ -821,7 +747,7 @@ class FactCheckClient:
         """
         try:
             url = urljoin(self.server_url, f"direct_verify/{task_id}")
-            response = self._make_request('get', url, timeout=180)  # 增加直接验证的超时时间
+            response = self._make_request('get', url, timeout=180)
 
             if response and response.status_code == 200:
                 return response.json()
@@ -853,13 +779,11 @@ class FactCheckClient:
         """
         logger.info(f"开始完整工作流程，声明: '{claim}'")
 
-        # 1. 检查服务器状态
         if not self.check_server():
             logger.error("服务器不可用，无法继续")
             return None
 
-        # 2. 提交任务
-        for attempt in range(3):  # 提交任务最多尝试3次
+        for attempt in range(3):
             if attempt > 0:
                 logger.info(f"第 {attempt + 1} 次尝试提交任务...")
 
@@ -874,11 +798,10 @@ class FactCheckClient:
             logger.error("多次尝试提交任务均失败，无法继续")
             return None
 
-        # 3. 如果是直接验证，则调用直接验证接口
         if direct_verify:
             logger.info("使用Qwen直接验证...")
 
-            for attempt in range(3):  # 直接验证最多尝试3次
+            for attempt in range(3):
                 if attempt > 0:
                     logger.info(f"第 {attempt + 1} 次尝试直接验证...")
 
@@ -889,29 +812,24 @@ class FactCheckClient:
                 logger.warning(f"直接验证失败，等待5秒后重试...")
                 time.sleep(5)
 
-            # 保存结果到文件(如果指定了输出路径)
             if result and output_path:
                 self._safe_save_result(result, output_path)
 
             return result
 
-        # 4. 等待服务器处理任务并获取查询
         logger.info("等待服务器处理任务...")
-        time.sleep(5)  # 给服务器一些处理时间
+        time.sleep(5)
 
-        # 5. 处理查询，最多尝试3次
         for attempt in range(3):
             if attempt > 0:
                 logger.info(f"第 {attempt + 1} 次尝试处理查询...")
 
-            # 使用可配置的查询等待时间
             if self.process_queries(task_id, max_wait_time=query_wait_time):
                 break
 
             logger.warning(f"处理查询失败，等待10秒后重试...")
             time.sleep(10)
 
-        # 6. 等待服务器完成验证
         start_time = time.time()
         completed = False
         result = None
@@ -931,27 +849,21 @@ class FactCheckClient:
                     logger.debug(f"错误详情: {status.get('traceback')}")
                     break
 
-                # 更新进度条
                 elapsed = min(int(time.time() - start_time), max_wait_time)
                 pbar.update(elapsed - pbar.n)
 
-                # 短暂休眠
                 time.sleep(5)
 
         if not completed:
             logger.warning(f"等待超时，任务可能仍在处理中。任务ID: {task_id}")
-            # 清理当前任务ID
             self.current_task_id = None
             return None
 
-        # 7. 下载结果(如果指定了输出路径)
         if completed and output_path:
             if not self.download_result(task_id, output_path):
-                # 如果下载失败但我们有结果，则直接保存
                 if result:
                     self._safe_save_result(result, output_path)
 
-        # 清理当前任务ID
         self.current_task_id = None
         return result
 
@@ -964,27 +876,22 @@ class FactCheckClient:
             output_path: 输出文件路径
         """
         try:
-            # 处理输出路径
             if output_path.startswith('/tmp/'):
-                # 将 /tmp/ 路径转换为适合当前系统的路径
                 temp_dir = get_temp_dir()
                 filename = os.path.basename(output_path)
                 output_path = os.path.join(temp_dir, filename)
                 logger.info(f"输出路径已调整为: {output_path}")
             
-            # 确保输出目录存在
             output_dir = os.path.dirname(output_path)
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
             
-            # 保存结果
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
             logger.info(f"结果已保存到: {output_path}")
             
         except Exception as e:
             logger.error(f"保存结果时出错: {e}")
-            # 尝试保存到当前目录
             try:
                 fallback_path = f"result_{int(time.time())}.json"
                 with open(fallback_path, 'w', encoding='utf-8') as f:
@@ -1011,22 +918,18 @@ def main():
 
     args = parser.parse_args()
 
-    # 设置日志级别
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    # 从环境变量获取API密钥和搜索引擎ID(如果命令行未提供)
     api_key = args.api_key or os.environ.get("GOOGLE_API_KEY")
     search_engine_id = args.search_engine_id or os.environ.get("GOOGLE_CSE_ID")
 
     if not api_key or not search_engine_id:
         logger.warning("未设置Google API密钥或搜索引擎ID")
 
-    # 创建客户端实例
     client = FactCheckClient(args.server, api_key, search_engine_id, args.max_retries)
 
     try:
-        # 如果指定了测试搜索，则只执行搜索测试
         if args.test_search:
             safe_print(f"\n===== 测试搜索查询: '{args.test_search}' =====")
             results = client.perform_search(args.test_search)
@@ -1035,7 +938,6 @@ def main():
                 safe_print(f"\n[{i}] {result}")
             return
 
-        # 执行完整工作流程
         result = client.run_complete_workflow(
             args.claim,
             args.media,
@@ -1045,7 +947,6 @@ def main():
             args.query_wait
         )
 
-        # 打印结果摘要
         if result:
             safe_print("\n===== 事实核查结果摘要 =====")
 

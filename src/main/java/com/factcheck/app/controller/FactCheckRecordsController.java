@@ -32,7 +32,6 @@ public class FactCheckRecordsController {
     @GetMapping("/records")
     public String recordsPage(Model model) {
         model.addAttribute("title", "事实核查记录管理");
-        // 修改返回值以匹配实际的模板文件名
         return "admin/factcheck_records_page";
     }
     
@@ -50,10 +49,8 @@ public class FactCheckRecordsController {
             @RequestParam(defaultValue = "desc") String sortOrder) {
         
         try {
-            // 计算偏移量
             int offset = (page - 1) * size;
             
-            // 构建查询条件
             Map<String, Object> params = new HashMap<>();
             params.put("offset", offset);
             params.put("limit", size);
@@ -68,16 +65,13 @@ public class FactCheckRecordsController {
                 params.put("search", "%" + search.trim() + "%");
             }
             
-            // 获取记录列表和总数
             List<FactCheckRecord> records = factCheckMapper.findRecordsWithPagination(params);
             int totalCount = factCheckMapper.countRecordsWithFilter(params);
             
-            // 处理记录数据
             List<Map<String, Object>> processedRecords = records.stream()
                 .map(this::processRecord)
                 .collect(Collectors.toList());
             
-            // 计算分页信息
             int totalPages = (int) Math.ceil((double) totalCount / size);
             
             Map<String, Object> response = new HashMap<>();
@@ -114,7 +108,6 @@ public class FactCheckRecordsController {
             
             Map<String, Object> response = processRecord(record);
             
-            // 解析结果JSON
             if (record.getResult() != null && !record.getResult().trim().isEmpty()) {
                 try {
                     Object resultData = objectMapper.readValue(record.getResult(), Object.class);
@@ -212,23 +205,18 @@ public class FactCheckRecordsController {
         try {
             Map<String, Object> stats = new HashMap<>();
             
-            // 总记录数
             int totalRecords = factCheckMapper.countAll();
             stats.put("totalRecords", totalRecords);
             
-            // 按状态统计
             Map<String, Integer> statusStats = factCheckMapper.getStatusStats();
             stats.put("statusStats", statusStats);
             
-            // 今日新增
             int todayCount = factCheckMapper.countTodayRecords();
             stats.put("todayCount", todayCount);
             
-            // 本周新增
             int weekCount = factCheckMapper.countWeekRecords();
             stats.put("weekCount", weekCount);
             
-            // 成功率
             int completedCount = statusStats.getOrDefault("completed", 0);
             double successRate = totalRecords > 0 ? (double) completedCount / totalRecords * 100 : 0;
             stats.put("successRate", Math.round(successRate * 100.0) / 100.0);
@@ -255,7 +243,6 @@ public class FactCheckRecordsController {
                     .body(Map.of("error", "记录不存在"));
             }
             
-            // 更新状态为处理中
             factCheckMapper.updateStatus(id, "processing", null);
             
             logger.info("重新执行核查任务: ID={}, Claim={}", id, record.getClaim());
@@ -287,7 +274,6 @@ public class FactCheckRecordsController {
         result.put("directVerify", record.getDirectVerify());
         result.put("errorMessage", record.getErrorMessage());
         
-        // 格式化时间
         if (record.getCreateTime() != null) {
             result.put("createTime", record.getCreateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             result.put("createTimeRaw", record.getCreateTime());
@@ -298,20 +284,16 @@ public class FactCheckRecordsController {
             result.put("updateTimeRaw", record.getUpdateTime());
         }
         
-        // 状态标签和颜色
         result.put("statusInfo", getStatusInfo(record.getStatus()));
         
-        // 声明预览（限制长度）
         String claimPreview = record.getClaim();
         if (claimPreview != null && claimPreview.length() > 100) {
             claimPreview = claimPreview.substring(0, 100) + "...";
         }
         result.put("claimPreview", claimPreview);
         
-        // 是否有媒体文件
         result.put("hasMedia", record.getMediaFileName() != null && !record.getMediaFileName().trim().isEmpty());
         
-        // 处理时长（如果已完成）
         if (record.getCreateTime() != null && record.getUpdateTime() != null) {
             long duration = java.time.Duration.between(record.getCreateTime(), record.getUpdateTime()).getSeconds();
             result.put("duration", formatDuration(duration));
